@@ -248,6 +248,7 @@ let
     ] ++ optional (container.entrypoint != null)
       "--entrypoint=${escapeShellArg container.entrypoint}"
       ++ (mapAttrsToList (k: v: "-e ${escapeShellArg k}=${escapeShellArg v}") container.environment)
+      ++ optional (cfg.backend == "podman") "-e 'PODMAN_SYSTEMD_UNIT=%n'"
       ++ map (f: "--env-file ${escapeShellArg f}") container.environmentFiles
       ++ map (p: "-p ${escapeShellArg p}") container.ports
       ++ optional (container.user != null) "-u ${escapeShellArg container.user}"
