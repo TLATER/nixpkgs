@@ -24,7 +24,7 @@ stdenv.mkDerivation rec {
     owner = "Nvidia";
     repo = pname;
     rev = version;
-    hash = "sha256-KxlUuoj2HJhkqkIX+Pic/0+36g/N3qfAAlnvYO2Y6uQ=";
+    hash = "";
   };
 
   postPatch = ''
