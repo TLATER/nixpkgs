@@ -146,6 +146,16 @@ stdenv.mkDerivation rec {
   desktopItems = [ desktopItem ];
 
   meta = with lib; {
+    # Minecraft versions 1.19 and up will not launch, since they now
+    # use native shared library components from lwjgl which fail to
+    # load under NixOS with this launcher.
+    #
+    # Older versions of Minecraft *do* work, but users will probably
+    # be surprised by the breakage on newer versions.
+    #
+    # PrismLauncher should probably be recommended as an alternative
+    # while this is broken.
+    broken = true;
     description = "Official launcher for Minecraft, a sandbox-building game";
     homepage = "https://minecraft.net";
     maintainers = with maintainers; [ cpages ryantm infinisil ];
