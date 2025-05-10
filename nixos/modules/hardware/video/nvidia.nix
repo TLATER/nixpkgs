@@ -364,14 +364,16 @@ in
           systemd.tmpfiles.rules = lib.mkIf config.virtualisation.docker.enableNvidia [
             "L+ /run/nvidia-docker/bin - - - - ${nvidia_x11.bin}/origBin"
           ];
-          services.udev.extraRules = ''
-            # Create /dev/nvidia-uvm when the nvidia-uvm module is loaded.
-            KERNEL=="nvidia", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidiactl c 195 255'"
-            KERNEL=="nvidia", RUN+="${pkgs.runtimeShell} -c 'for i in $$(cat /proc/driver/nvidia/gpus/*/information | grep Minor | cut -d \  -f 4); do mknod -m 666 /dev/nvidia$${i} c 195 $${i}; done'"
-            KERNEL=="nvidia_modeset", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidia-modeset c 195 254'"
-            KERNEL=="nvidia_uvm", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidia-uvm c $$(grep nvidia-uvm /proc/devices | cut -d \  -f 1) 0'"
-            KERNEL=="nvidia_uvm", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidia-uvm-tools c $$(grep nvidia-uvm /proc/devices | cut -d \  -f 1) 1'"
-          '';
+          services.udev.packages = lib.singleton (
+            pkgs.writeTextDir "lib/udev/rules.d/98-nvidia-uvm.rules" ''
+              # Create /dev/nvidia-uvm when the nvidia-uvm module is loaded.
+              KERNEL=="nvidia", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidiactl c 195 255'"
+              KERNEL=="nvidia", RUN+="${pkgs.runtimeShell} -c 'for i in $$(cat /proc/driver/nvidia/gpus/*/information | grep Minor | cut -d \  -f 4); do mknod -m 666 /dev/nvidia$${i} c 195 $${i}; done'"
+              KERNEL=="nvidia_modeset", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidia-modeset c 195 254'"
+              KERNEL=="nvidia_uvm", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidia-uvm c $$(grep nvidia-uvm /proc/devices | cut -d \  -f 1) 0'"
+              KERNEL=="nvidia_uvm", RUN+="${pkgs.runtimeShell} -c 'mknod -m 666 /dev/nvidia-uvm-tools c $$(grep nvidia-uvm /proc/devices | cut -d \  -f 1) 1'"
+            ''
+          );
           hardware.graphics = {
             extraPackages = [ nvidia_x11.out ];
             extraPackages32 = [ nvidia_x11.lib32 ];
@@ -669,27 +671,33 @@ in
               options nvidia "NVreg_DynamicPowerManagement=0x02"
             '';
           };
-          services.udev.extraRules = lib.optionalString cfg.powerManagement.finegrained (
-            lib.optionalString (lib.versionOlder config.boot.kernelPackages.kernel.version "5.5") ''
-              # Remove NVIDIA USB xHCI Host Controller devices, if present
-              ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x0c0330", ATTR{remove}="1"
+          services.udev.packages =
+            let
+              # As recommended by
+              # https://download.nvidia.com/XFree86/Linux-x86_64/570.133.07/README/dynamicpowermanagement.html#AutomatedSetup803b0
+              enablePowerManagementPackage = pkgs.writeTextDir "lib/udev/rules.d/80-nvidia-pm.rules" (
+                lib.optionalString (lib.versionOlder config.boot.kernelPackages.kernel.version "5.5") ''
+                  # Remove NVIDIA USB xHCI Host Controller devices, if present
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x0c0330", ATTR{remove}="1"
 
-              # Remove NVIDIA USB Type-C UCSI devices, if present
-              ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x0c8000", ATTR{remove}="1"
+                  # Remove NVIDIA USB Type-C UCSI devices, if present
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x0c8000", ATTR{remove}="1"
 
-              # Remove NVIDIA Audio devices, if present
-              ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x040300", ATTR{remove}="1"
-            ''
-            + ''
-              # Enable runtime PM for NVIDIA VGA/3D controller devices on driver bind
-              ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="auto"
-              ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030200", TEST=="power/control", ATTR{power/control}="auto"
+                  # Remove NVIDIA Audio devices, if present
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x040300", ATTR{remove}="1"
+                ''
+                + ''
+                  # Enable runtime PM for NVIDIA VGA/3D controller devices on driver bind
+                  ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="auto"
+                  ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030200", TEST=="power/control", ATTR{power/control}="auto"
 
-              # Disable runtime PM for NVIDIA VGA/3D controller devices on driver unbind
-              ACTION=="unbind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="on"
-              ACTION=="unbind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030200", TEST=="power/control", ATTR{power/control}="on"
-            ''
-          );
+                  # Disable runtime PM for NVIDIA VGA/3D controller devices on driver unbind
+                  ACTION=="unbind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="on"
+                  ACTION=="unbind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030200", TEST=="power/control", ATTR{power/control}="on"
+                ''
+              );
+            in
+            lib.optionalString cfg.powerManagement.finegrained (lib.singleton enablePowerManagementPackage);
         })
         # Data Center
         (lib.mkIf (cfg.datacenter.enable) {
