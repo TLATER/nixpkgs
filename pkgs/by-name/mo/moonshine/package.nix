@@ -2,6 +2,7 @@
   cmake,
   fetchFromGitHub,
   pkg-config,
+  makeBinaryWrapper,
   lib,
   libevdev,
   libgbm,
@@ -15,6 +16,7 @@
   versionCheckHook,
   vulkan-loader,
   wayland,
+  xwayland,
   aws-lc,
   sqlite,
 }:
@@ -56,6 +58,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
     pkg-config
     cmake
     rustPlatform.bindgenHook
+    makeBinaryWrapper
   ];
 
   buildInputs = [
@@ -107,6 +110,11 @@ rustPlatform.buildRustPackage (finalAttrs: {
     substitute \
       dist/start-moonshine.sh "$out/bin/start-moonshine.sh" \
       --replace-fail /usr/bin/moonshine "$out/bin/moonshine"
+    chmod 755 "$out/bin/start-moonshine.sh"
+
+    # Wrap the moonshine binary with xwayland since it's an
+    # effectively mandatory runtime dependency
+    wrapProgram "$out/bin/moonshine" --prefix PATH : ${lib.makeBinPath [ xwayland ]}
   '';
 
   postFixup = ''
