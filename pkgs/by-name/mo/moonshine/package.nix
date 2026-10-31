@@ -95,6 +95,18 @@ rustPlatform.buildRustPackage (finalAttrs: {
     # polkit rule for sleep inhibitor
     install -Dm644 dist/50-moonshine-inhibit-sleep.rules \
       "$out/share/polkit-1/rules.d/50-moonshine-inhibit-sleep.rules"
+
+    # systemd service
+    install -d "$out/lib/systemd/system"
+    substitute \
+      dist/moonshine@.service "$out/lib/systemd/system/moonshine@.service" \
+      --replace-fail /usr/bin/start-moonshine.sh "$out/bin/start-moonshine.sh" \
+      --replace-fail 'Group=%i' 'Group=users'
+
+    # startup script used by the systemd service
+    substitute \
+      dist/start-moonshine.sh "$out/bin/start-moonshine.sh" \
+      --replace-fail /usr/bin/moonshine "$out/bin/moonshine"
   '';
 
   postFixup = ''
